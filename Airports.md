@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='utf-8' />
+  <title>Display a map</title>
+  <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+  <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.49.0/mapbox-gl.js'></script>
+  <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.49.0/mapbox-gl.css' rel='stylesheet' />
+  <style>
+    body { margin:0; padding:0; }
+    #map { position:absolute; top:0; bottom:0; width:100%; }
+  </style>
+</head>
+<body>
+
+<style>
+#map {
+position:absolute;
+left:25%;
+top:0;
+bottom:0;
+width: 75%;
+}
+.map-overlay {
+position: absolute;
+width: 25%;
+top: 0;
+bottom: 0;
+left: 0;
+font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+background-color: #fff;
+max-height: 100%;
+overflow: hidden;
+}
+
+.map-overlay fieldset {
+display: none;
+background: #ddd;
+border: none;
+padding: 10px;
+margin: 0;
+}
+
+.map-overlay input {
+display: block;
+border: none;
+width: 100%;
+border-radius: 3px;
+padding: 10px;
+margin: 0;
+}
+
+.map-overlay .listing {
+overflow: auto;
+max-height: 100%;
+}
+
+.map-overlay .listing > * {
+display: block;
+padding: 5px 10px;
+margin: 0;
+}
+
+.map-overlay .listing a {
+border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+color: #404;
+text-decoration: none;
+}
+
+.map-overlay .listing a:last-child {
+border: none;
+}
+
+.map-overlay .listing a:hover {
+background: #f0f0f0;
+}
+</style>
+<div id='map'></div>
+
+<div class='map-overlay'>
+<fieldset>
+<input id='feature-filter' type='text' placeholder='Filter results by name' />
+</fieldset>
+<div id='feature-listing' class='listing'></div>
+</div>
+
+<script>
+
+mapboxgl.accessToken = 'pk.eyJ1IjoibnN1a3VtYXIiLCJhIjoiY2pyNWRuN2tkMDB2YjQ1cGJkaDNkdWtmaiJ9.kTF8Lyz0fZl7QWbFLwCSIQ';
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/nsukumar/cjrwdov6w15v31fjnfblh38bx',
+  center: [-14.625099, 38.030013],
+  zoom: 1.4
+});
+
+// holds visible airport features for filtering
+var intairports = [];
+
+//create pop-up
+var popup = new mapboxgl.Popup({
+  closeButton: false
+});
+
+var filterElement = document.getElementById('feature-filter');
+var listingElement = document.getElementById('feature-listing');
+
+function renderListings(features){
+  //clear the listings
+  listingElement.innerHTML = '';
+  if (features.length) {
+    features.forEach(function(feature) {
+      var prop = feature.properties;
+      var item = document.createElement('a');
+      item.href = prop.wikipedia;
+      item.target = '_blank';
+      item.textContent = prop.name + '(' + prop.abbrev + ')';
+      item.addEventListener ('mouseover', function(){
+
+        //Highlight corresponding feature
+        popup.setLngLat(feature.geometry.coordinates)
+        .setText(feature.properties.name + '(' + feature.properties.abbrev + ')')
+        .addTo(map);
+      });
+      listingElement.appendChild(item);
+    });
+    // Show filter input
+    filterElement.parentNode.style.display = 'block';
+    } else {
+    var empty = document.createElement('p');
+    empty.textContent = 'Drag the map to populate results';
+    listingElement.appendChild(empty);
+
+    // Hide the filter input
+    filterElement.parentNode.style.display = 'none';
+
+    //remove feature filter
+    //map.setFilter('intairports', ['has', 'abbrev']);
+  }
+}
+function normalize(string) {
+  return string.trim().toLowerCase();
+}
+
+function getUniqueFeatures(array, comparatorProperty) {
+  var existingFeatureKeys = {};
+  var uniqueFeatures = array.filter(function(el){
+    if (existingFeatureKeys[el.properties[comparatorProperty]]) {
+      return false;
+    } else {
+      existingFeatureKeys[el.properties[comparatorProperty]] = true;
+      return true;
+    }
+  });
+  return uniqueFeatures;
+}
+map.on('load', function(){
+  map.addLayer({
+    object
+    "source": {
+    "type": "vector",
+    "url": "mapbox:/nsukumar/mapbox.cjrwdxspf13n932mr3cwfcgng"
+    },
+    //"source-layer": "ne_10m_airports",
+    //"type": "symbol",
+    //"layout": {
+    //"icon-image": "airport-15",
+    //"icon-padding": 0,
+    //"icon-allow-overlap":true
+    //}
+  });
+  map.on('moveend', function(){
+    var features = map.queryRenderedFeatures({layers:['airports-intl']});
+    if (features) {
+      var uniqueFeatures = getUniqueFeatures(features, "icao");
+      //Populate features
+      renderListings(uniqueFeatures);
+
+      //Clear
+      filterElement.value = '';
+      intairports = uniqueFeatures;
+    }
+  });
+
+  map.on('mousemove', 'airports-intl', function(e){
+    map.getCanvas().style.cursor = 'pointer';
+    // populate pop up
+    var feature = e.feature[0];
+    popup.setLngLat(feature.geometry.coordinates)
+    .setText(feature.properties.name + '(' + feature.properties.abbrev + ')')
+    .addTo(map);
+  });
+  map.on('mouseleave', 'airport-intl', function() {
+  map.getCanvas().style.cursor = '';
+  popup.remove();
+  });
+
+  filterElement.addEventListener('keyup', function(e) {
+  var value = normalize(e.target.value);
+
+  // Filter visible features that don't match the input value.
+  var filtered = airports.filter(function(feature) {
+  var name = normalize(feature.properties.name);
+  var code = normalize(feature.properties.abbrev);
+  return name.indexOf(value) > -1 || code.indexOf(value) > -1;
+  });
+
+  // Populate the sidebar with filtered results
+  renderListings(filtered);
+
+  // Set the filter to populate features into the layer.
+  map.setFilter('airports-intl', ['match', ['get', 'abbrev'], filtered.map(function(feature) {
+  return feature.properties.abbrev;
+  }), true, false]);
+  });
+
+
+  renderListings([]);
+});
+
+
+
+
+</script>
+
+</body>
+</html>
